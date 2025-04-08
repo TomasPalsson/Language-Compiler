@@ -46,13 +46,6 @@ impl Lexer {
     }
     fn lex_identifier(&mut self) -> Token {
         let start = self.position;
-        if self.peek() == Some('a'){
-            self.advance();
-            if (self.peek() == Some('b')) {
-                self.advance();
-                return Token::Function; 
-            }
-        }
         while let Some(c) = self.peek() {
             if c.is_alphanumeric() || c == '_' {
                 self.advance();
@@ -60,7 +53,12 @@ impl Lexer {
                 break;
             }
         }
-        Token::Identifier(self.input[start..self.position].to_string())
+        let identifier = &self.input[start..self.position];
+        match identifier {
+            "ab" => Token::Function,
+            "endf" => Token::EndFunction,
+            _ => Token::Identifier(identifier.to_string()),
+        }
     }
     fn lex_operator(&mut self) -> Token {
         let c = self.peek().unwrap();
@@ -72,11 +70,13 @@ impl Lexer {
             '=' => Token::Assign,
             '(' => Token::LParen,
             ')' => Token::RParen,
+            ',' => Token::Comma,
+            ';' => Token::Semicolon,
             '\n' => Token::End,
             _ => panic!("Unexpected character: {}", c),
         }
     }
-    pub fn tokenize(&mut self) -> Vec<Token> {
+    pub fn tokenise(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         while let Some(c) = self.peek() {
             if c.is_whitespace() {

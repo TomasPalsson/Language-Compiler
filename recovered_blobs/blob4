@@ -33,4 +33,3 @@ fn main() {
     let ast = parse_program(&tokens);
     println!("Abstract Syntax tree: {:?}", ast);
 }
-
