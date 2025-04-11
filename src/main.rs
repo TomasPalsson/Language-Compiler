@@ -1,36 +1,42 @@
-use std::io::{self, Write};
+use compiler::Compiler;
+
 use crate::lexer::Lexer;
 use crate::parser::parse_program;
-mod tokens; 
+use std::fs;
+use std::io::Write;
+use std::fs::File;
+mod ast;
+mod compiler;
 mod lexer;
 mod parser;
-mod ast;
+mod tokens;
 
-fn read_input() -> String {
-    print!("> ");
-    io::stdout().flush().unwrap();
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-
-    input.to_string()
-
-}
 fn main() {
-    let mut input = read_input().trim().to_string();
-
-    while !input.ends_with('\n') {
-        let next_line = read_input().trim().to_string();
-        if next_line == "stop" {
-            break;
-        }
-        input += &next_line;
-        println!("input: {:?}", input);
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() < 3 {
+        eprintln!("Usage: {} <input.my> <output.asm>", args[0]);
+        std::process::exit(1);
     }
 
-    let mut lexer = Lexer::new(input);
+    let file_input = fs::read_to_string(&args[1])
+        .expect("Error reading input file");
+
+    let mut lexer = Lexer::new(file_input);
     let tokens = lexer.tokenise();
     println!("Tokens: {:?}", tokens);
-    let ast = parse_program(&tokens);
-    println!("Abstract Syntax tree: {:?}", ast);
-}
 
+    let ast = parse_program(&tokens).expect("Parsing error");
+    println!("AST: {:?}", ast);
+
+    let mut comp = Compiler::new();
+    let result = comp.compile(ast);
+
+    let output_path = &args[2];
+    let mut file = File::create(output_path).expect("Unable to create output file");
+
+    for line in result {
+        writeln!(file, "{}", line).expect("Failed to write line");
+    }
+
+    println!("Assembly written to {}", output_path);
+}

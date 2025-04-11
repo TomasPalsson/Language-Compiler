@@ -1,7 +1,7 @@
 use crate::tokens::Token;
 use std::{self, iter::Peekable};
 use std::slice::Iter;
-use crate::ast::{Statement, Expression};
+use crate::ast::{BinaryOperator, Expression, Statement};
 
 pub fn parse_program(tokens: &[Token]) -> Option<Vec<Statement>>{
     let mut iter = tokens.iter().peekable();
@@ -20,6 +20,27 @@ fn parse_statement(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String
     
     let statement = match iter.peek() {
         Some(Token::Function) => parse_function(iter),
+        Some(Token::FunctionCall(name)) => {
+            iter.next();
+            Ok(Statement::FunctionCall{
+            name: name.clone(),
+            args: Vec::new(),
+        })},
+
+        Some(Token::Print) => {
+            iter.next();
+            match iter.peek() {
+                Some(Token::Identifier(name)) => {
+                    iter.next();
+                    Ok(Statement::Print(Expression::Variable(name.clone())))
+                }
+                Some(Token::Number(int)) => {
+                    iter.next();
+                    Ok(Statement::Print(Expression::Integer(*int)))
+                }
+                _ => Err("Print statement not defined correctly".to_string())
+            }
+        }
         Some(Token::Identifier(_)) => parse_assignment(iter),
         _ => Err(format!("Cannot parse found {:?}", iter.peek())),
     }?;
@@ -99,18 +120,17 @@ fn parse_assignment(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, Strin
         Token::Identifier(name) => {
             iter.next();
             if matches!(iter.peek().unwrap(), Token::Assign) {
+
                 iter.next();
-                match iter.peek() {
-                    Some(Token::Number(int)) => {
-                        iter.next();
-                        Ok(Statement::Assign { name: name.to_string(), value: Expression::Integer(*int)})
-                    }
-                    Some(Token::Identifier(var)) => {
-                        iter.next();
-                        Ok(Statement::Assign {name: name.to_string(), value: Expression::Variable(var.to_string())})
-                    }
-                    _ => Err(format!("Assignment parsing failed got: {:?}", iter.peek()))
-                } 
+                let val = parse_expression(iter);
+                if let Ok(val) = &val {
+                    return Ok(Statement::Assign{
+                        name: name.clone(),
+                        value: val.clone()
+                    });
+                } else {
+                    panic!("Error in parsing assignment");
+                }
             } else {
 
                 Err(format!("No = Operator found: {:?}", iter.peek().unwrap()))
@@ -119,4 +139,51 @@ fn parse_assignment(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, Strin
         _ => Err("Error in parsing assignment!".to_string())
     }
 }
+
+fn get_operator(token: &Token) -> Result<BinaryOperator, String> {
+    match token {
+        Token::Plus => Ok(BinaryOperator::Add),
+        Token::Minus => Ok(BinaryOperator::Sub),
+        Token::Multiply => Ok(BinaryOperator::Mul),
+        Token::Divide => Ok(BinaryOperator::Div),
+        _ => Err(format!("Error in parsing operator: {:?}", token)),
+    }
+
+}
+
+
+fn parse_expression(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String> {
+    let mut left = parse_atomics(iter)?;
+
+    while let Some(token) = iter.peek() {
+        if let Ok(op) = get_operator(token) {
+            iter.next();
+            let right = parse_atomics(iter)?;
+            left = Expression::BinaryOp {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            };
+        } else {
+            break;
+        }
+    }
+
+    Ok(left)
+}
+
+fn parse_atomics(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String> {
+    match iter.peek() {
+        Some(Token::Number(n)) => {
+            iter.next();
+            Ok(Expression::Integer(*n))
+        }
+        Some(Token::Identifier(name)) => {
+            iter.next();
+            Ok(Expression::Variable(name.clone()))
+        }
+        other => Err(format!("Expected expression, got {:?}", other)),
+    }
+}
+
 

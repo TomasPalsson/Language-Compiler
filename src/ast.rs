@@ -6,11 +6,18 @@ pub enum Statement {
         name: String,
         value: Expression,
     },
+    Main{
+        name: String,
+    },
     Print(Expression),
     Function{
         name: String,
         params: Vec<Expression>,
         body: Vec<Statement>,
+    },
+    FunctionCall{
+        name: String,
+        args: Vec<Expression>
     }
 }
 

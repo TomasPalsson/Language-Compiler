@@ -1,0 +1,16 @@
+
+run main()
+this = 2 + 2 * 4 / 8;
+print this;
+~newfunc;
+endf
+
+run newfunc()
+oof = 12;
+print oof;
+~spicy;
+endf
+
+run spicy()
+print 69;
+endf

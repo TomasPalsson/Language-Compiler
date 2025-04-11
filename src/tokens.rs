@@ -1,9 +1,11 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Number(i64),
     Identifier(String),
     Function,
     EndFunction,
+    FunctionCall(String),
+    Print,
     Plus,
     Minus,
     Multiply,

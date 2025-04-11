@@ -47,16 +47,20 @@ impl Lexer {
     fn lex_identifier(&mut self) -> Token {
         let start = self.position;
         while let Some(c) = self.peek() {
-            if c.is_alphanumeric() || c == '_' {
+            if c.is_alphanumeric() || c == '~' {
                 self.advance();
             } else {
                 break;
             }
         }
         let identifier = &self.input[start..self.position];
+        if identifier.strip_prefix('~').is_some() {
+            return Token::FunctionCall(identifier[1..].to_string());
+        }
         match identifier {
-            "ab" => Token::Function,
+            "run" => Token::Function,
             "endf" => Token::EndFunction,
+            "print" => Token::Print,
             _ => Token::Identifier(identifier.to_string()),
         }
     }
@@ -81,9 +85,9 @@ impl Lexer {
         while let Some(c) = self.peek() {
             if c.is_whitespace() {
                 self.skip_whitespace();
-            } else if c.is_digit(10) {
+            } else if c.is_ascii_digit() {
                 tokens.push(Token::Number(self.lex_number()));
-            } else if c.is_alphabetic() {
+            } else if c.is_alphabetic() || c == '~' {
                 tokens.push(self.lex_identifier());
             } else {
                 tokens.push(self.lex_operator());
