@@ -26,6 +26,7 @@ fn parse_statement(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String
             name: name.clone(),
             args: Vec::new(),
         })},
+        Some(Token::If) => parse_if(iter),
 
         Some(Token::Print) => {
             iter.next();
@@ -49,12 +50,17 @@ fn parse_statement(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String
         return Ok(statement);
     }
 
-    match iter.peek() {
-        Some(Token::EndFunction) => {
+    let next_token = iter.peek();
+    match next_token {
+        Some(Token::End) => {
             iter.next();
             Ok(statement)
         }
         Some(Token::Semicolon) => {
+            iter.next();
+            Ok(statement)
+        }
+        Some(Token::Then) => {
             iter.next();
             Ok(statement)
         }
@@ -92,7 +98,7 @@ fn parse_function(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String>
 
 
     let mut body = Vec::new();
-    while !matches!(**iter.peek().unwrap(), Token::EndFunction) {
+    while !matches!(**iter.peek().unwrap(), Token::End) {
         let statement = parse_statement(iter);
         body.push(statement?);
     }
@@ -100,6 +106,34 @@ fn parse_function(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String>
         name,
         params: args,
         body
+    })
+}
+
+fn parse_if(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String> {
+    iter.next(); // Consuming if
+    let condition = parse_expression(iter)?;
+    expect_token(iter, Token::Then)?;
+    iter.next();
+
+    let mut then_body = Vec::new();
+    while !matches!(iter.peek(), Some(Token::Else) | Some(Token::End)) {
+        then_body.push(parse_statement(iter)?);
+    }
+
+    let mut else_body = None;
+    if matches!(iter.peek(), Some(Token::Else)) {
+        iter.next(); // Consuming else
+        else_body = Some(Vec::new());
+        while !matches!(iter.peek(), Some(Token::End)) {
+            else_body.as_mut().unwrap().push(parse_statement(iter)?);
+        }
+    }
+    
+    expect_token(iter, Token::End)?;
+    Ok(Statement::If {
+        condition,
+        then_body,
+        else_body,
     })
 }
 
@@ -116,28 +150,20 @@ fn parse_arg(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String> {
 }
 
 fn parse_assignment(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String> {
-    match iter.peek().unwrap() {
-        Token::Identifier(name) => {
-            iter.next();
-            if matches!(iter.peek().unwrap(), Token::Assign) {
+    let name_token = iter.next().ok_or("Expected identifier")?;
+    let name = match name_token {
+        Token::Identifier(n) => n.clone(),
+        _ => return Err("Expected identifier".into()),
+    };
 
-                iter.next();
-                let val = parse_expression(iter);
-                if let Ok(val) = &val {
-                    return Ok(Statement::Assign{
-                        name: name.clone(),
-                        value: val.clone()
-                    });
-                } else {
-                    panic!("Error in parsing assignment");
-                }
-            } else {
+    match iter.next() {
+        Some(Token::Assign) => {}
+        _ => return Err("Expected '=' after identifier".into()),
+    };
 
-                Err(format!("No = Operator found: {:?}", iter.peek().unwrap()))
-            }
-        }
-        _ => Err("Error in parsing assignment!".to_string())
-    }
+    let value = parse_expression(iter)?;
+
+    Ok(Statement::Assign{ name, value })
 }
 
 fn get_operator(token: &Token) -> Result<BinaryOperator, String> {
@@ -146,31 +172,59 @@ fn get_operator(token: &Token) -> Result<BinaryOperator, String> {
         Token::Minus => Ok(BinaryOperator::Sub),
         Token::Multiply => Ok(BinaryOperator::Mul),
         Token::Divide => Ok(BinaryOperator::Div),
+        Token::Eq => Ok(BinaryOperator::Eq),
         _ => Err(format!("Error in parsing operator: {:?}", token)),
     }
 
 }
 
+fn expect_token(iter: &mut Peekable<Iter<Token>>, expected: Token) -> Result<(), String> {
+    if let Some(token) = iter.peek() {
+        if **token == expected {
+            Ok(())
+        } else {
+            Err(format!("Expected {:?}, found {:?}", expected, token))
+        }
+    } else {
+        Err(format!("Expected {:?}, but reached end of input", expected))
+    }
+}
+
+fn get_precedence(op: &Token) -> u8 {
+    match op {
+        Token::Plus | Token::Minus => 1,
+        Token::Multiply | Token::Divide => 2,
+        _ => 0,
+    }
+}
 
 fn parse_expression(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String> {
+    parse_binary_expression(iter, 0) 
+}
+
+fn parse_binary_expression(iter: &mut Peekable<Iter<Token>>, min_prec: u8) -> Result<Expression, String> {
     let mut left = parse_atomics(iter)?;
 
-    while let Some(token) = iter.peek() {
-        if let Ok(op) = get_operator(token) {
-            iter.next();
-            let right = parse_atomics(iter)?;
-            left = Expression::BinaryOp {
-                left: Box::new(left),
-                op,
-                right: Box::new(right),
-            };
-        } else {
+    while let Some(op_token) = iter.peek() {
+        if !matches!(op_token, Token::Plus | Token::Minus | Token::Multiply | Token::Divide | Token::Eq) {
             break;
         }
-    }
-
+        let prec = get_precedence(op_token);
+        if prec < min_prec {
+            break;
+        }
+        let op = get_operator(op_token)?;
+        iter.next(); 
+        let right = parse_binary_expression(iter, prec + 1)?;
+        left = Expression::BinaryOp {
+            left: Box::new(left),
+            op,
+            right: Box::new(right),
+        };
+    } 
     Ok(left)
 }
+
 
 fn parse_atomics(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String> {
     match iter.peek() {

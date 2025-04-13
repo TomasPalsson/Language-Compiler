@@ -18,7 +18,13 @@ pub enum Statement {
     FunctionCall{
         name: String,
         args: Vec<Expression>
-    }
+    },
+    If {
+        condition: Expression,
+        then_body: Vec<Statement>,
+        else_body: Option<Vec<Statement>>,
+    },
+     
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +50,7 @@ pub enum BinaryOperator {
     Sub,
     Mul,
     Div,
+    Eq,
 }
 
 

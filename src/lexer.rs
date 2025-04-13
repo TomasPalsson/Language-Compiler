@@ -59,19 +59,30 @@ impl Lexer {
         }
         match identifier {
             "run" => Token::Function,
-            "endf" => Token::EndFunction,
+            "endf" => Token::End,
             "print" => Token::Print,
+            "if" => Token::If,
+            "then" => Token::Then,
+            "else" => Token::Else,
             _ => Token::Identifier(identifier.to_string()),
         }
     }
     fn lex_operator(&mut self) -> Token {
         let c = self.peek().unwrap();
+        if matches!(c, '=') {
+            self.advance();
+            if self.peek() == Some('=') {
+                self.advance();
+                return Token::Eq;
+            } else {
+                return Token::Assign;
+            }
+        }
         match c {
             '+' => Token::Plus,
             '-' => Token::Minus,
             '*' => Token::Multiply,
             '/' => Token::Divide,
-            '=' => Token::Assign,
             '(' => Token::LParen,
             ')' => Token::RParen,
             ',' => Token::Comma,

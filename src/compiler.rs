@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{Statement, Expression, BinaryOperator};
+use crate::ast::{Statement, Expression};
 use std::slice::Iter;
 use std::{self, iter::Peekable};
 
@@ -10,6 +10,7 @@ pub struct Compiler {
     functions: Vec<String>,
     assem: Vec<String>,
     var_offset: i32,
+    label_count: i32,
 }
 
 
@@ -21,12 +22,19 @@ impl Compiler {
             functions: Vec::new(),
             assem: Vec::new(),
             var_offset: 8,
+            label_count: 0,
         }
     }
     pub fn compile(&mut self, ast: Vec<Statement>) -> Vec<String> {
         let mut iter = ast.iter().peekable();
         self.compiler(&mut iter);
         self.assem.clone()
+    }
+
+    fn new_label(&mut self, label: &str) -> String {
+        let label = format!("{}_{}", label, self.label_count);
+        self.label_count += 1;
+        label
     }
 
     fn compiler(&mut self, iter: &mut Peekable<Iter<Statement>>) {
@@ -45,31 +53,40 @@ impl Compiler {
 
 
     fn emit_data(&mut self) {
+        // Allows the use of printf if gcc is used to link
         self.assem.push("extern _printf".into());
         self.assem.push("section .rodata".into());
+        // String required for printf to print ints
         self.assem.push("fmt: db \"%ld\", 10, 0".to_string());
 
         // main and text section
         self.assem.push("global _main".into());
+        // Main section of the code
         self.assem.push("section .text".into());
     }
 
     fn compile_function(&mut self, iter: &mut Peekable<Iter<Statement>>) {
         if let Some(Statement::Function { name, params, body }) = iter.peek() {
+            // Function has to be called main for program to run
             if name != "main" {
                 self.assem.push(format!("global _{}", name));
             }
+            // Prologue
             self.assem.push(format!("_{}:", name));
             self.assem.push(";   ; prologue".into());
+            // Pushing the previous call frame on to the stack - saving the previous base pointer
             self.assem.push("    push rbp".into());
+            // Sets rbp to the current stack pointer - setting up the new call frame
             self.assem.push("    mov rbp, rsp".into());
             // reserve space 
             self.assem.push("; Reserving space".into());
+            // reserving space for local variables
             self.assem.push("    sub rsp, 24".into());
             self.assem.push(";   ; BODY".into());
             self.compile_statement(body);
+            // Epilogue - cleaning up the stack 
             self.assem.push("    mov rsp, rbp".into());
-            // TODO  temp 
+            // TODO:  temp returning value
             self.assem.push("    mov rax, 0".into());  
             self.assem.push("    pop rbp".into());
             self.assem.push("    ret".into());
@@ -85,7 +102,27 @@ impl Compiler {
             match stmt {
                 Statement::Assign { name, value } => {
                     self.compile_assignment(name, value);
-                }
+                },
+                Statement::If { condition, then_body, else_body } => {
+                    self.compile_expression(condition);
+                    self.assem.push("    cmp rax, 0".into());
+
+                    let end_label = self.new_label("endif");
+                    let else_label_opt = else_body.as_ref().map(|_| self.new_label("else"));
+
+                    if let Some(ref else_label) = else_label_opt {
+                        self.assem.push(format!("    je {}", else_label));
+                    } else {
+                        self.assem.push(format!("    je {}", end_label));
+                    }
+                    self.compile_statement(&then_body);
+                    if let Some(else_body) = else_body {
+                        self.assem.push(format!("    jmp {}", end_label));
+                        self.assem.push(format!("{}:", else_label_opt.unwrap()));
+                        self.compile_statement(else_body);
+                    }
+                    self.assem.push(format!("{}:", end_label));
+                },
                 Statement::FunctionCall { name, args } => {
                     self.assem.push(format!("    call _{}", name));
                     // TODO FIX THIS
@@ -163,6 +200,11 @@ impl Compiler {
                         self.assem.push("    mov rax, rcx".into());    // Move left operand into RAX
                         self.assem.push("    mov rdx, 0".into());        // Clear rdx
                         self.assem.push("    idiv rbx".into());
+                    },
+                    crate::ast::BinaryOperator::Eq => {
+                        self.assem.push("    cmp rax, rcx".into());
+                        self.assem.push("    sete al".into());
+                        self.assem.push("    movzx rax, al".into());
                     }
                 }
             }
