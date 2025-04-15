@@ -100,6 +100,9 @@ impl Compiler {
                 Statement::Assign { name, value } => {
                     self.compile_assignment(name, value);
                 },
+                Statement::While { condition, body } => {
+                    self.compile_while(condition, body);
+                }
                 Statement::If { condition, then_body, else_body } => {
                     self.compile_expression(condition);
                     self.assem.push("    cmp rax, 0".into());
@@ -203,6 +206,21 @@ impl Compiler {
                         self.assem.push("    sete al".into());
                         self.assem.push("    movzx rax, al".into());
                     }
+                    crate::ast::BinaryOperator::NEq => {
+                        self.assem.push("    cmp rax, rcx".into());
+                        self.assem.push("    setne al".into());
+                        self.assem.push("    movzx rax, al".into());
+                    }
+                    crate::ast::BinaryOperator::Lt => {
+                        self.assem.push("    cmp rax, rcx".into());
+                        self.assem.push("    setl al".into());
+                        self.assem.push("    movzx rax, al".into());
+                    }
+                    crate::ast::BinaryOperator::Gt => {
+                        self.assem.push("    cmp rax, rcx".into());
+                        self.assem.push("    setg al".into());
+                        self.assem.push("    movzx rax, al".into());
+                    }
                 }
             }
             _ => panic!("Unhandled expression type"),
@@ -210,9 +228,14 @@ impl Compiler {
     }
 
     fn compile_assignment(&mut self, name: &String, value: &crate::ast::Expression) {
-        let offset = self.var_offset;
-        self.offset_map.insert(name.clone(), offset);
-        self.var_offset += 8;
+        let offset = if let Some(&offset) = self.offset_map.get(name) {
+            offset
+        } else {
+            let off = self.var_offset;
+            self.offset_map.insert(name.clone(), off);
+            self.var_offset += 8;
+            off
+        };
         self.compile_expression(value);
         self.assem.push(format!("    mov [rbp - {}], rax", offset));
     }
@@ -239,5 +262,22 @@ impl Compiler {
         self.assem.push("    lea rdi, [rel fmt]".to_string());
         self.assem.push("    mov rax, 0".to_string());
         self.assem.push("    call _printf".to_string());
+    }
+
+    fn compile_while(&mut self, condition: &Expression, body: &[Statement]) {
+        let start_label = self.new_label("while_start");
+        let end_label = self.new_label("while_end");
+
+        self.assem.push(format!("{}:", start_label));
+        self.compile_expression(condition);
+        self.assem.push("    cmp rax, 0".into());
+        self.assem.push(format!("    je {}", end_label));
+
+        for stmt in body {
+            self.compile_statement(&[stmt.clone()]);
+        }
+
+        self.assem.push(format!("    jmp {}", start_label));
+        self.assem.push(format!("{}:", end_label));
     }
 }

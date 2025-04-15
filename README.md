@@ -93,5 +93,4 @@ and output
 
 
 # Todo
-- [ ] Add loops
 - [ ] Add strings 

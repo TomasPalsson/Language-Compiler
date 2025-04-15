@@ -60,6 +60,8 @@ impl Lexer {
         match identifier {
             "run" => Token::Function,
             "end" => Token::End,
+            "while" => Token::While,
+            "do" => Token::Do,
             "print" => Token::Print,
             "if" => Token::If,
             "then" => Token::Then,
@@ -86,6 +88,17 @@ impl Lexer {
             '(' => Token::LParen,
             ')' => Token::RParen,
             ',' => Token::Comma,
+            '<' => Token::Less,
+            '>' => Token::Greater,
+            '!' => {
+                self.advance();
+                if self.peek() == Some('=') {
+                    self.advance();
+                    Token::NotEq
+                } else {
+                    panic!("Unexpected character after '!': {}", self.peek().unwrap()); 
+                }
+            }
             ';' => Token::Semicolon,
             '\n' => Token::End,
             _ => panic!("Unexpected character: {}", c),

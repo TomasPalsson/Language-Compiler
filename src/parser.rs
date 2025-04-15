@@ -42,6 +42,7 @@ fn parse_statement(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String
                 _ => Err("Print statement not defined correctly".to_string())
             }
         }
+        Some(Token::While) => parse_while(iter),
         Some(Token::Identifier(_)) => parse_assignment(iter),
         _ => Err(format!("Cannot parse found {:?}", iter.peek())),
     }?;
@@ -173,6 +174,9 @@ fn get_operator(token: &Token) -> Result<BinaryOperator, String> {
         Token::Multiply => Ok(BinaryOperator::Mul),
         Token::Divide => Ok(BinaryOperator::Div),
         Token::Eq => Ok(BinaryOperator::Eq),
+        Token::NotEq => Ok(BinaryOperator::NEq),
+        Token::Less => Ok(BinaryOperator::Lt),
+        Token::Greater => Ok(BinaryOperator::Gt),
         _ => Err(format!("Error in parsing operator: {:?}", token)),
     }
 
@@ -206,7 +210,7 @@ fn parse_binary_expression(iter: &mut Peekable<Iter<Token>>, min_prec: u8) -> Re
     let mut left = parse_atomics(iter)?;
 
     while let Some(op_token) = iter.peek() {
-        if !matches!(op_token, Token::Plus | Token::Minus | Token::Multiply | Token::Divide | Token::Eq) {
+        if !matches!(op_token, Token::Plus | Token::Minus | Token::Multiply | Token::Divide | Token::Eq | Token::Less | Token::Greater | Token::NotEq) {
             break;
         }
         let prec = get_precedence(op_token);
@@ -238,6 +242,24 @@ fn parse_atomics(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String>
         }
         other => Err(format!("Expected expression, got {:?}", other)),
     }
+}
+
+fn parse_while(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String> {
+    iter.next(); // Consuming while
+    let condition = parse_expression(iter)?;
+    expect_token(iter, Token::Do)?;
+    iter.next();
+
+    let mut body = Vec::new();
+    while !matches!(iter.peek(), Some(Token::End)) {
+        body.push(parse_statement(iter)?);
+    }
+    
+    expect_token(iter, Token::End)?;
+    Ok(Statement::While {
+        condition,
+        body,
+    })
 }
 
 

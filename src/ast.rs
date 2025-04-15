@@ -24,6 +24,10 @@ pub enum Statement {
         then_body: Vec<Statement>,
         else_body: Option<Vec<Statement>>,
     },
+    While {
+        condition: Expression,
+        body: Vec<Statement>,
+    },
      
 }
 
@@ -51,6 +55,9 @@ pub enum BinaryOperator {
     Mul,
     Div,
     Eq,
+    NEq,
+    Gt,
+    Lt,
 }
 
 

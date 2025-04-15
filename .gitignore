@@ -1,4 +1,5 @@
 /target
 *.o
 ./*
+test_*
 
