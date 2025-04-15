@@ -1,3 +1,26 @@
+# Compiler
+Basic compiler written in Rust that compiles a simple language to x86 assembly.
+
+# Example code 
+```
+run main()
+    a = 1;
+    b = 2;
+    c = a + b;
+    print c;
+    if c == 3 then
+        print a;
+    else 
+        print b;
+    end
+    ~func;
+
+run func()
+    print 1111;
+end
+```
+Results in the following assembly code:
+```assembly
 extern _printf
 section .rodata
 fmt: db "%ld", 10, 0
@@ -59,3 +82,16 @@ _func:
     mov rax, 0
     pop rbp
     ret
+```
+
+and output
+```
+3
+1
+1111
+```
+
+
+# Todo
+- [ ] Add loops
+- [ ] Add strings 

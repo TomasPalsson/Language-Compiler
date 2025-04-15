@@ -1,0 +1,16 @@
+run main()
+    a = 1;
+    b = 2;
+    c = a + b;
+    print c;
+    if c == 3 then
+        print a;
+    else 
+        print b;
+    end
+    ~func;
+end
+
+run func()
+    print 1111;
+end

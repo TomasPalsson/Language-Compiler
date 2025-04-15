@@ -59,7 +59,7 @@ impl Lexer {
         }
         match identifier {
             "run" => Token::Function,
-            "endf" => Token::End,
+            "end" => Token::End,
             "print" => Token::Print,
             "if" => Token::If,
             "then" => Token::Then,

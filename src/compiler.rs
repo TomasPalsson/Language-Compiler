@@ -73,21 +73,18 @@ impl Compiler {
             }
             // Prologue
             self.assem.push(format!("_{}:", name));
-            self.assem.push(";   ; prologue".into());
             // Pushing the previous call frame on to the stack - saving the previous base pointer
             self.assem.push("    push rbp".into());
             // Sets rbp to the current stack pointer - setting up the new call frame
             self.assem.push("    mov rbp, rsp".into());
             // reserve space 
-            self.assem.push("; Reserving space".into());
             // reserving space for local variables
             self.assem.push("    sub rsp, 24".into());
-            self.assem.push(";   ; BODY".into());
             self.compile_statement(body);
             // Epilogue - cleaning up the stack 
             self.assem.push("    mov rsp, rbp".into());
             // TODO:  temp returning value
-            self.assem.push("    mov rax, 0".into());  
+            self.assem.push("    mov rax, 0".into());
             self.assem.push("    pop rbp".into());
             self.assem.push("    ret".into());
 
