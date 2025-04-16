@@ -1,5 +1,5 @@
 # Compiler
-Basic compiler written in Rust that compiles a simple language to x86 assembly.
+Basic (Turing Complete) compiler written in Rust that compiles a simple language to x86 assembly.
 
 # Example code 
 ```
