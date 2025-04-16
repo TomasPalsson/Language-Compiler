@@ -1,22 +1,55 @@
 # Compiler
-Basic (Turing Complete) compiler written in Rust that compiles a simple language to x86 assembly.
 
-# Example code 
-```
+A simple, Turing-complete compiler written in Rust. It compiles a minimal high-level language to x86-64 NASM assembly.
+
+---
+
+## Features
+
+- Full function definitions and calls
+- Local variable declarations and assignments
+- Integer and string literals
+- While loops and if-else conditionals
+- Printing to stdout (`print`)
+- Expression evaluation with support for:
+  - Arithmetic: `+`, `-`, `*`, `/`
+  - Comparisons: `==`, `!=`, `<`, `>`
+- String constants stored in `.rodata`
+- Emits raw NASM assembly that links with `printf`
+
+---
+
+## ⚙️ Example Code
+
+```plaintext
 run main() 
   a = 1;
   while a > 5 do 
       print a;
-      print "Hello ";
+      ~otherwhile;
       a = a + 1;
     if a == 5 then
       print "Its a 5";
     end
   end
+
+end
+
+
+run otherwhile()
+  b = 1;
+  while b > 5 do 
+    print "B is less than 5";
+    b = b + 1;
+  end
 end
 ```
-Results in the following assembly code:
-```assembly
+
+---
+
+## Assembly Output
+
+```nasm
 extern _printf
 section .rodata
 fmt: db "%ld", 10, 0
@@ -31,61 +64,72 @@ _main:
     sub rsp, 24
     mov rax, 1
     mov [rbp - 8], rax
-while_start_0:
-    mov rax, [rbp - 8]
-    push rax
-    mov rax, 5
-    pop rcx
-    cmp rax, rcx
-    setg al
-    movzx rax, al
-    cmp rax, 0
-    je while_end_1
-    mov rsi, [rbp - 8]
-    lea rdi, [rel fmt]
-    mov rax, 0
-    call _printf
-    lea rsi, [rel str_0]
-    lea rdi, [rel fmt_str]
-    mov rax, 0
-    call _printf
-    mov rax, [rbp - 8]
-    push rax
-    mov rax, 1
-    pop rcx
-    add rax, rcx
-    mov [rbp - 8], rax
-    mov rax, [rbp - 8]
-    push rax
-    mov rax, 5
-    pop rcx
-    cmp rax, rcx
-    sete al
-    movzx rax, al
-    cmp rax, 0
-    je endif_2
-    lea rsi, [rel str_1]
-    lea rdi, [rel fmt_str]
-    mov rax, 0
-    call _printf
-endif_2:
-    jmp while_start_0
-while_end_1:
-    mov rsp, rbp
-    mov rax, 0
-    pop rbp
-    ret
+...
 ```
+[See rest](output.asm)
+---
 
-and output
-```
+## Output
+
+```plaintext
 1
-Hello 
+B is less than 5
+B is less than 5
+B is less than 5
+B is less than 5
 2
-Hello 
+B is less than 5
+B is less than 5
+B is less than 5
+B is less than 5
 3
-Hello 
+B is less than 5
+B is less than 5
+B is less than 5
+B is less than 5
 4
-Hello 
+B is less than 5
+B is less than 5
+B is less than 5
+B is less than 5
 Its a 5
 ```
+
+---
+
+## Internals
+
+The compiler builds an intermediate AST and walks it to emit assembly. It currently uses:
+
+- Stack-based variable allocation
+- Custom parsing for function bodies, expressions, control flow
+- A simple string pool to deduplicate literals
+
+Argument parsing and argument passing for functions is **in progress**.
+
+---
+
+## Build Requirements
+
+- **Rust** (to compile the compiler)
+- **NASM** (to assemble output)
+- **GCC** or compatible linker (to link with libc/printf)
+
+---
+
+## Usage
+
+```bash
+cargo run path/to/source.lang > out.asm
+nasm -f elf64 out.asm -o out.o
+gcc out.o -o prog
+./prog
+```
+
+---
+
+## 📌 TODO
+
+- [ ] Argument parsing + register/stack-based argument passing
+- [ ] Return values
+- [ ] More control structures (`for`, `break`, etc.)
