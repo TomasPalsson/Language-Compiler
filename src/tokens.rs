@@ -2,6 +2,7 @@
 pub enum Token {
     Number(i64),
     Identifier(String),
+    StringLiteral(String),
     Function,
     FunctionCall(String),
     If,

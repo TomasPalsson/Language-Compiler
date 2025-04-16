@@ -34,7 +34,7 @@ pub enum Statement {
 #[derive(Debug, Clone)]
 pub enum Expression {
     Integer(i64),
-    String(String),
+    StringLiteral(String),
     FunctionArg(String),
     Variable(String),
     BinaryOp {

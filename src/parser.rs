@@ -39,6 +39,10 @@ fn parse_statement(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String
                     iter.next();
                     Ok(Statement::Print(Expression::Integer(*int)))
                 }
+                Some(Token::StringLiteral(string)) => {
+                    iter.next();
+                    Ok(Statement::Print(Expression::StringLiteral(string.clone())))
+                }
                 _ => Err("Print statement not defined correctly".to_string())
             }
         }
@@ -235,6 +239,10 @@ fn parse_atomics(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String>
         Some(Token::Number(n)) => {
             iter.next();
             Ok(Expression::Integer(*n))
+        }
+        Some(Token::StringLiteral(s)) => {
+            iter.next();
+            Ok(Expression::StringLiteral(s.clone()))
         }
         Some(Token::Identifier(name)) => {
             iter.next();

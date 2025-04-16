@@ -100,7 +100,19 @@ impl Lexer {
                 }
             }
             ';' => Token::Semicolon,
-            '\n' => Token::End,
+            '"' => {
+                self.advance();
+                let start = self.position;
+                while let Some(c) = self.peek() {
+                    if c == '"' {
+                        self.advance();
+                        break;
+                    } else {
+                        self.advance();
+                    }
+                }
+                Token::StringLiteral(self.input[start..self.position - 1].to_string())
+            }
             _ => panic!("Unexpected character: {}", c),
         }
     }
@@ -114,8 +126,12 @@ impl Lexer {
             } else if c.is_alphabetic() || c == '~' {
                 tokens.push(self.lex_identifier());
             } else {
-                tokens.push(self.lex_operator());
-                self.advance();
+                let tok = self.lex_operator();
+                tokens.push(tok.clone());
+                match tok {
+                    Token::Eq | Token::NotEq | Token::StringLiteral(_) => {}
+                    _ => self.advance(),
+                }
             }
         }
         tokens

@@ -6,9 +6,10 @@ use std::{self, iter::Peekable};
 
 pub struct Compiler {
     offset_map: HashMap<String, i32>,
-    value_map: HashMap<String, i32>,
-    functions: Vec<String>,
     assem: Vec<String>,
+    rodata: Vec<String>,
+    string_constants: HashMap<String, String>,
+    string_count: i32,
     var_offset: i32,
     label_count: i32,
 }
@@ -18,9 +19,10 @@ impl Compiler {
     pub fn new() -> Compiler {
         Compiler {
             offset_map: HashMap::new(),
-            value_map: HashMap::new(),
-            functions: Vec::new(),
             assem: Vec::new(),
+            rodata: Vec::new(),
+            string_constants: HashMap::new(),
+            string_count: 0,
             var_offset: 8,
             label_count: 0,
         }
@@ -28,7 +30,12 @@ impl Compiler {
     pub fn compile(&mut self, ast: Vec<Statement>) -> Vec<String> {
         let mut iter = ast.iter().peekable();
         self.compiler(&mut iter);
-        self.assem.clone()
+        
+        let mut result = Vec::new();
+        result.extend(self.emit_data().clone());
+        result.extend(self.assem.clone());
+
+       result 
     }
 
     fn new_label(&mut self, label: &str) -> String {
@@ -37,8 +44,21 @@ impl Compiler {
         label
     }
 
+    fn register_string_literal(&mut self, s: &str) -> String {
+        if let Some(label) = self.string_constants.get(s) {
+            return label.clone();
+        }
+
+        let label = format!("str_{}", self.string_count);
+        self.string_count += 1;
+        self.string_constants.insert(s.to_string(), label.clone());
+
+        self.rodata.push(format!("{}: db \"{}\", 0", label, s.replace("\"", "\\\"")));
+        label
+    }
+    
+
     fn compiler(&mut self, iter: &mut Peekable<Iter<Statement>>) {
-        self.emit_data();
         while let Some(stmt) = iter.peek() {
             match stmt {
                 Statement::Function { .. } => {
@@ -52,17 +72,26 @@ impl Compiler {
     }
 
 
-    fn emit_data(&mut self) {
+    fn emit_data(&mut self) -> Vec<String> {
+        let mut data = Vec::new();
         // Allows the use of printf if gcc is used to link
-        self.assem.push("extern _printf".into());
-        self.assem.push("section .rodata".into());
+        data.push("extern _printf".into());
+        data.push("section .rodata".into());
         // String required for printf to print ints
-        self.assem.push("fmt: db \"%ld\", 10, 0".to_string());
+        data.push("fmt: db \"%ld\", 10, 0".to_string());
+
+        // String required for printf to print string 
+        data.push("fmt_str: db \"%s\", 10, 0".to_string());
+
+        // Inject all string literals here
+        data.extend(self.rodata.clone());
 
         // main and text section
-        self.assem.push("global _main".into());
+        data.push("global _main".into());
         // Main section of the code
-        self.assem.push("section .text".into());
+        data.push("section .text".into());
+
+        data
     }
 
     fn compile_function(&mut self, iter: &mut Peekable<Iter<Statement>>) {
@@ -173,6 +202,12 @@ impl Compiler {
                     panic!("Variable {} not defined", var);
                 }
             }
+            Expression::StringLiteral(s) =>  {
+                // Register string literal and get its label.
+                let label = self.register_string_literal(s);
+                // Load the address of the string literal into RAX.
+                self.assem.push(format!("    lea rax, [rel {}]", label));
+            },
             Expression::BinaryOp { left, op, right } => {
                 // First, compile the left side:
                 self.compile_expression(left);
@@ -246,12 +281,20 @@ impl Compiler {
 
     fn compile_print(&mut self, value: &crate::ast::Expression) {
         match value {
-            crate::ast::Expression::Integer(int) => {
+            Expression::Integer(int) => {
                 self.assem.push(format!("   mov rsi, {}", int));
+                self.assem.push("    lea rdi, [rel fmt]".to_string());
+
             }
-            crate::ast::Expression::Variable(var) => {
+            Expression::StringLiteral(s) => {
+                let label = self.register_string_literal(s);
+                self.assem.push(format!("    lea rsi, [rel {}]", label));
+                self.assem.push("    lea rdi, [rel fmt_str]".to_string()); // fmt_str for string, e.g., "%s\n"
+            }
+            Expression::Variable(var) => {
                 if let Some(var_offset) = self.offset_map.get(var) {
                     self.assem.push(format!("    mov rsi, [rbp - {}]", var_offset));
+                    self.assem.push("    lea rdi, [rel fmt]".to_string());
                 } else {
                     panic!("Variable {} is not defined", var);
                 }
@@ -259,7 +302,6 @@ impl Compiler {
             _ => {}
         }
 
-        self.assem.push("    lea rdi, [rel fmt]".to_string());
         self.assem.push("    mov rax, 0".to_string());
         self.assem.push("    call _printf".to_string());
     }
