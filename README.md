@@ -1,6 +1,6 @@
 # Compiler
 
-A simple, Turing-complete compiler written in Rust. It compiles a minimal high-level language to x86-64 NASM assembly.
+A simple compiler written in Rust. It compiles a minimal high-level language to x86-64 NASM assembly.
 
 ---
 
