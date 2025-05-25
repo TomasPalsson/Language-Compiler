@@ -14,8 +14,6 @@ A simple, Turing-complete compiler written in Rust. It compiles a minimal high-l
 - Expression evaluation with support for:
   - Arithmetic: `+`, `-`, `*`, `/`
   - Comparisons: `==`, `!=`, `<`, `>`
-- String constants stored in `.rodata`
-- Emits raw NASM assembly that links with `printf`
 
 ---
 
