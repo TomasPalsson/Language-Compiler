@@ -12,6 +12,7 @@ pub enum Token {
     Else,       
     Print,
     Send,
+    Fetch,
     Plus,
     Eq,
     NotEq,

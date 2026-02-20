@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{Statement, Expression};
 use std::slice::Iter;
@@ -13,6 +13,7 @@ pub struct Compiler {
     var_offset: i32,
     label_count: i32,
     epilogue_label: String,
+    string_vars: HashSet<String>,
 }
 
 
@@ -27,6 +28,7 @@ impl Compiler {
             var_offset: 8,
             label_count: 0,
             epilogue_label: String::new(),
+            string_vars: HashSet::new(),
         }
     }
     pub fn compile(&mut self, ast: Vec<Statement>) -> Vec<String> {
@@ -78,6 +80,7 @@ impl Compiler {
         let mut data = Vec::new();
         // Allows the use of printf if gcc is used to link
         data.push("extern _printf".into());
+        data.push("extern _bonk_http_fetch".into());
         data.push("section .rodata".into());
         // String required for printf to print ints
         data.push("fmt: db \"%ld\", 10, 0".to_string());
@@ -102,6 +105,7 @@ impl Compiler {
             let saved_offset_map = std::mem::take(&mut self.offset_map);
             let saved_var_offset = self.var_offset;
             let saved_epilogue_label = std::mem::take(&mut self.epilogue_label);
+            let saved_string_vars = std::mem::take(&mut self.string_vars);
             self.var_offset = 8;
             self.epilogue_label = self.new_label("epilogue");
 
@@ -136,6 +140,7 @@ impl Compiler {
             self.offset_map = saved_offset_map;
             self.var_offset = saved_var_offset;
             self.epilogue_label = saved_epilogue_label;
+            self.string_vars = saved_string_vars;
         } else {
             self.assem.push("Error: No function found\n".to_string());
         }
@@ -194,6 +199,9 @@ impl Compiler {
                 Statement::Send(expr) => {
                     self.compile_expression(expr);
                     self.assem.push(format!("    jmp {}", self.epilogue_label));
+                }
+                Statement::Fetch { method, url, body } => {
+                    self.compile_fetch(method, url, body.as_ref());
                 }
                 _ => {}
             }
@@ -292,6 +300,9 @@ impl Compiler {
                 self.assem.push("    mov rax, 0".into());
                 self.assem.push(format!("    call _{}", name));
             }
+            Expression::Fetch { method, url, body } => {
+                self.compile_fetch(method, url, body.as_deref());
+            }
         }
     }
 
@@ -304,6 +315,12 @@ impl Compiler {
             self.var_offset += 8;
             off
         };
+        // Track whether this variable holds a string value
+        if matches!(value, Expression::StringLiteral(_) | Expression::Fetch { .. }) {
+            self.string_vars.insert(name.clone());
+        } else {
+            self.string_vars.remove(name);
+        }
         self.compile_expression(value);
         self.assem.push(format!("    mov [rbp - {}], rax", offset));
     }
@@ -321,16 +338,37 @@ impl Compiler {
     }
 
     fn compile_print(&mut self, value: &crate::ast::Expression) {
-        let fmt_label = if matches!(value, Expression::StringLiteral(_)) {
-            "fmt_str"
-        } else {
-            "fmt"
+        let fmt_label = match value {
+            Expression::StringLiteral(_) | Expression::Fetch { .. } => "fmt_str",
+            Expression::Variable(name) if self.string_vars.contains(name) => "fmt_str",
+            _ => "fmt",
         };
         self.compile_expression(value);
         self.assem.push("    mov rsi, rax".into());
         self.assem.push(format!("    lea rdi, [rel {}]", fmt_label));
         self.assem.push("    mov rax, 0".into());
         self.assem.push("    call _printf".into());
+    }
+
+    fn compile_fetch(&mut self, method: &Expression, url: &Expression, body: Option<&Expression>) {
+        // Evaluate args left-to-right, push onto stack
+        self.compile_expression(method);
+        self.assem.push("    push rax".into());
+        self.compile_expression(url);
+        self.assem.push("    push rax".into());
+        if let Some(body_expr) = body {
+            self.compile_expression(body_expr);
+            self.assem.push("    push rax".into());
+        } else {
+            self.assem.push("    push 0".into()); // NULL body
+        }
+        // Pop into argument registers: rdi=method, rsi=url, rdx=body
+        self.assem.push("    pop rdx".into());
+        self.assem.push("    pop rsi".into());
+        self.assem.push("    pop rdi".into());
+        self.assem.push("    mov rax, 0".into());
+        self.assem.push("    call _bonk_http_fetch".into());
+        // Result (response string pointer) is in rax
     }
 
     fn compile_while(&mut self, condition: &Expression, body: &[Statement]) {

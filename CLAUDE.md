@@ -24,6 +24,7 @@ Pipeline: **source → lexer → parser → compiler → x86-64 NASM assembly**
 | `src/parser.rs` | Recursive descent parser — tokens to AST (`Vec<Statement>`) |
 | `src/ast.rs` | AST types: `Statement`, `Expression`, `BinaryOperator` |
 | `src/compiler.rs` | Code generator — walks AST, emits x86-64 NASM lines |
+| `runtime/http.c` | C runtime — HTTP fetch via libcurl, linked into final binary |
 
 ## Language Syntax
 
@@ -53,11 +54,31 @@ run foo(a, b)         # function with parameters
 end
 ```
 
+### HTTP Fetch
+
+```
+run main()
+  result = fetch "http://example.com";        # GET request (1 arg = URL)
+  print result;
+
+  resp = fetch "POST" "http://api.com" "data"; # method + URL + body
+  print resp;
+
+  fetch "DELETE" "http://api.com/item";        # fire-and-forget (no body)
+end
+```
+
+- 1 arg: `fetch URL` — implicit GET
+- 2 args: `fetch METHOD URL` — custom method, no body
+- 3 args: `fetch METHOD URL BODY` — custom method with request body
+- Returns the response body as a string
+- Works as both expression (`x = fetch ...;`) and statement (`fetch ...;`)
+
 Operators: `+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`
 
 ## Platform
 
 - Target: macOS x86-64 (`nasm -f macho64`, symbols prefixed with `_`)
-- Links against libc for `_printf`
+- Links against libc for `_printf` and libcurl for HTTP fetch
 - On Apple Silicon: uses `gcc -arch x86_64` to cross-link; runs via Rosetta
-- Requires: Rust, NASM, GCC
+- Requires: Rust, NASM, GCC, libcurl
