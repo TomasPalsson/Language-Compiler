@@ -1,0 +1,19 @@
+run add(a, b)
+  send a + b;
+end
+
+run fibonacci(n)
+  if n <= 0 then
+    send 0;
+  end
+  if n == 1 then
+    send 1;
+  else
+    send ~fibonacci(n - 1) + ~fibonacci(n - 2);
+  end
+end
+
+run main()
+  x = ~fibonacci(10);
+  print x;
+end

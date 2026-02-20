@@ -1,134 +1,173 @@
-# Compiler
+# Bonk
 
-A simple compiler written in Rust. It compiles a minimal high-level language to x86-64 NASM assembly.
+A compiled programming language written in Rust. Bonk compiles to x86-64 NASM assembly, targeting macOS.
 
----
-
-## Features
-
-- Full function definitions and calls
-- Local variable declarations and assignments
-- Integer and string literals
-- While loops and if-else conditionals
-- Printing to stdout (`print`)
-- Expression evaluation with support for:
-  - Arithmetic: `+`, `-`, `*`, `/`
-  - Comparisons: `==`, `!=`, `<`, `>`
-
----
-
-## ⚙️ Example Code
-
-```plaintext
-run main() 
-  a = 1;
-  while a > 5 do 
-      print a;
-      ~otherwhile;
-      a = a + 1;
-    if a == 5 then
-      print "Its a 5";
-    end
+```
+run fibonacci(n)
+  if n <= 0 then
+    send 0;
   end
-
+  if n == 1 then
+    send 1;
+  else
+    send ~fibonacci(n - 1) + ~fibonacci(n - 2);
+  end
 end
 
-
-run otherwhile()
-  b = 1;
-  while b > 5 do 
-    print "B is less than 5";
-    b = b + 1;
-  end
+run main()
+  x = ~fibonacci(10);
+  print x;
 end
 ```
 
----
-
-## Assembly Output
-
-```nasm
-extern _printf
-section .rodata
-fmt: db "%ld", 10, 0
-fmt_str: db "%s", 10, 0
-str_0: db "Hello ", 0
-str_1: db "Its a 5", 0
-global _main
-section .text
-_main:
-    push rbp
-    mov rbp, rsp
-    sub rsp, 24
-    mov rax, 1
-    mov [rbp - 8], rax
-...
-```
-[See rest](output.asm)
-
----
-
-## Output
-
-```plaintext
-1
-B is less than 5
-B is less than 5
-B is less than 5
-B is less than 5
-2
-B is less than 5
-B is less than 5
-B is less than 5
-B is less than 5
-3
-B is less than 5
-B is less than 5
-B is less than 5
-B is less than 5
-4
-B is less than 5
-B is less than 5
-B is less than 5
-B is less than 5
-Its a 5
-```
-
----
-
-## Internals
-
-The compiler builds an intermediate AST and walks it to emit assembly. It currently uses:
-
-- Stack-based variable allocation
-- Custom parsing for function bodies, expressions, control flow
-- A simple string pool to deduplicate literals
-
-Argument parsing and argument passing for functions is **in progress**.
-
----
-
-## Build Requirements
-
-- **Rust** (to compile the compiler)
-- **NASM** (to assemble output)
-- **GCC** or compatible linker (to link with libc/printf)
-
----
-
-## Usage
+## Quick Start
 
 ```bash
-cargo run path/to/source.lang > out.asm
-nasm -f elf64 out.asm -o out.o
-gcc out.o -o prog
-./prog
+make run                           # compile + assemble + link + run examples/basic.bonk
+make run FILE=examples/basic.bonk  # explicit file
 ```
 
----
+### Requirements
 
-## 📌 TODO
+- [Rust](https://rustup.rs/)
+- [NASM](https://www.nasm.us/)
+- GCC (for linking against libc)
+- macOS x86-64 (runs via Rosetta on Apple Silicon)
 
-- [ ] Argument parsing + register/stack-based argument passing
-- [ ] Return values
-- [ ] More control structures (`for`, `break`, etc.)
+## Language Reference
+
+### Functions
+
+Every Bonk program needs a `main` function. Functions are defined with `run` and closed with `end`:
+
+```
+run main()
+  print "hello";
+end
+```
+
+Functions can take parameters:
+
+```
+run greet(name)
+  print name;
+end
+```
+
+### Variables
+
+Variables are assigned with `=`. No declaration needed — assignment creates the variable:
+
+```
+x = 10;
+y = x + 5;
+```
+
+### Return Values (`send`)
+
+Functions return values using `send`. Without `send`, a function returns `0` by default:
+
+```
+run add(a, b)
+  send a + b;
+end
+
+run main()
+  x = ~add(3, 5);
+  print x;
+end
+```
+
+`send` exits the function immediately, like `return` in other languages.
+
+### Function Calls
+
+Function calls use the `~` prefix. They can appear as statements or inside expressions:
+
+```
+~greet("world");           # statement (discard return value)
+x = ~add(1, 2);           # expression (capture return value)
+y = ~add(~add(1, 2), 3);  # nested calls
+```
+
+### Printing
+
+`print` outputs integers or strings to stdout:
+
+```
+print 42;
+print "hello";
+print x;
+print a + b;
+```
+
+### Operators
+
+| Operator | Description |
+|----------|-------------|
+| `+`      | Addition |
+| `-`      | Subtraction |
+| `*`      | Multiplication |
+| `/`      | Division |
+| `==`     | Equal |
+| `!=`     | Not equal |
+| `<`      | Less than |
+| `<=`     | Less than or equal |
+| `>`      | Greater than |
+
+### Control Flow
+
+**If-else:**
+
+```
+if x == 1 then
+  print "one";
+else
+  print "not one";
+end
+```
+
+The `else` branch is optional:
+
+```
+if x > 0 then
+  print "positive";
+end
+```
+
+**While loops:**
+
+```
+while x > 0 do
+  print x;
+  x = x - 1;
+end
+```
+
+## Build Commands
+
+| Command | Description |
+|---------|-------------|
+| `make run` | Full pipeline: compile, assemble, link, execute |
+| `make run FILE=path.bonk` | Run a specific source file |
+| `make compile` | Compile `.bonk` source to assembly |
+| `make assemble` | Assemble to object file |
+| `make link` | Link into executable |
+| `make clean` | Remove build artifacts |
+| `cargo build` | Build the compiler only |
+| `cargo run -- input.bonk output.asm` | Run compiler directly |
+
+## Architecture
+
+```
+source.bonk → Lexer → Parser → Compiler → output.asm → NASM → GCC → binary
+```
+
+| File | Role |
+|------|------|
+| `src/main.rs` | CLI entry point |
+| `src/lexer.rs` | Tokenizer — source text to tokens |
+| `src/tokens.rs` | Token enum definition |
+| `src/parser.rs` | Recursive descent parser — tokens to AST |
+| `src/ast.rs` | AST types: `Statement`, `Expression`, `BinaryOperator` |
+| `src/compiler.rs` | Code generator — AST to x86-64 NASM assembly |

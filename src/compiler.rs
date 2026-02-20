@@ -12,6 +12,7 @@ pub struct Compiler {
     string_count: i32,
     var_offset: i32,
     label_count: i32,
+    epilogue_label: String,
 }
 
 
@@ -25,6 +26,7 @@ impl Compiler {
             string_count: 0,
             var_offset: 8,
             label_count: 0,
+            epilogue_label: String::new(),
         }
     }
     pub fn compile(&mut self, ast: Vec<Statement>) -> Vec<String> {
@@ -96,31 +98,47 @@ impl Compiler {
 
     fn compile_function(&mut self, iter: &mut Peekable<Iter<Statement>>) {
         if let Some(Statement::Function { name, params, body }) = iter.peek() {
-            // Function has to be called main for program to run
+            // Save outer scope
+            let saved_offset_map = std::mem::take(&mut self.offset_map);
+            let saved_var_offset = self.var_offset;
+            let saved_epilogue_label = std::mem::take(&mut self.epilogue_label);
+            self.var_offset = 8;
+            self.epilogue_label = self.new_label("epilogue");
+
             if name != "main" {
                 self.assem.push(format!("global _{}", name));
             }
             // Prologue
             self.assem.push(format!("_{}:", name));
-            // Pushing the previous call frame on to the stack - saving the previous base pointer
             self.assem.push("    push rbp".into());
-            // Sets rbp to the current stack pointer - setting up the new call frame
             self.assem.push("    mov rbp, rsp".into());
-            // reserve space 
-            // reserving space for local variables
-            self.assem.push("    sub rsp, 24".into());
+            // Placeholder for stack reservation — patched after body compilation
+            let sub_rsp_idx = self.assem.len();
+            self.assem.push("    sub rsp, 0".into());
+
+            // Spill params to stack slots
+            self.compile_params(params);
+
             self.compile_statement(body);
-            // Epilogue - cleaning up the stack 
-            self.assem.push("    mov rsp, rbp".into());
-            // TODO:  temp returning value
+
+            // Patch frame size (round up to 16-byte alignment)
+            let frame_size = ((self.var_offset as usize + 15) / 16) * 16;
+            self.assem[sub_rsp_idx] = format!("    sub rsp, {}", frame_size);
+
+            // Epilogue — default return 0, then shared cleanup
             self.assem.push("    mov rax, 0".into());
+            self.assem.push(format!("{}:", self.epilogue_label));
+            self.assem.push("    mov rsp, rbp".into());
             self.assem.push("    pop rbp".into());
             self.assem.push("    ret".into());
 
+            // Restore outer scope
+            self.offset_map = saved_offset_map;
+            self.var_offset = saved_var_offset;
+            self.epilogue_label = saved_epilogue_label;
         } else {
             self.assem.push("Error: No function found\n".to_string());
         }
-
     }
 
     fn compile_statement(&mut self, body: &[Statement]) {
@@ -153,37 +171,29 @@ impl Compiler {
                     self.assem.push(format!("{}:", end_label));
                 },
                 Statement::FunctionCall { name, args } => {
-                    self.assem.push(format!("    call _{}", name));
-                    // TODO FIX THIS
+                    let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+                    // Evaluate each arg and push result onto stack
                     for arg in args {
-                        match arg {
-                            Expression::Integer(int) => {
-                                self.assem.push(format!("    mov rsi, {}", int));
-                            }
-                            Expression::Variable(var) => {
-                                if let Some(var_offset) = self.offset_map.get(var) {
-                                    self.assem.push(format!("    mov rsi, [rbp - {}]", var_offset));
-                                } else {
-                                    panic!("Variable {} is not defined", var);
-                                }
-                            }
-                            Expression::FunctionArg(arg) => {
-                                if let Some(var_offset) = self.offset_map.get(arg) {
-                                    self.assem.push(format!("    mov rsi, [rbp - {}]", var_offset));
-                                } else {
-                                    panic!("Variable {} is not defined", arg);
-                                }
-                            }
-                            _ => {}
-                        }
+                        self.compile_expression(arg);
+                        self.assem.push("    push rax".into());
                     }
-
+                    // Pop into registers in reverse order
+                    for i in (0..args.len()).rev() {
+                        self.assem.push(format!("    pop {}", arg_regs[i]));
+                    }
+                    // ABI: al = 0 (no floating-point args)
+                    self.assem.push("    mov rax, 0".into());
+                    self.assem.push(format!("    call _{}", name));
                 },
 
                 
 
                 Statement::Print ( value ) => {
                     self.compile_print(value);
+                }
+                Statement::Send(expr) => {
+                    self.compile_expression(expr);
+                    self.assem.push(format!("    jmp {}", self.epilogue_label));
                 }
                 _ => {}
             }
@@ -247,18 +257,41 @@ impl Compiler {
                         self.assem.push("    movzx rax, al".into());
                     }
                     crate::ast::BinaryOperator::Lt => {
-                        self.assem.push("    cmp rax, rcx".into());
+                        self.assem.push("    cmp rcx, rax".into());
                         self.assem.push("    setl al".into());
                         self.assem.push("    movzx rax, al".into());
                     }
+                    crate::ast::BinaryOperator::LtEq => {
+                        self.assem.push("    cmp rcx, rax".into());
+                        self.assem.push("    setle al".into());
+                        self.assem.push("    movzx rax, al".into());
+                    }
                     crate::ast::BinaryOperator::Gt => {
-                        self.assem.push("    cmp rax, rcx".into());
+                        self.assem.push("    cmp rcx, rax".into());
                         self.assem.push("    setg al".into());
                         self.assem.push("    movzx rax, al".into());
                     }
                 }
             }
-            _ => panic!("Unhandled expression type"),
+            Expression::FunctionArg(name) => {
+                if let Some(offset) = self.offset_map.get(name) {
+                    self.assem.push(format!("    mov rax, [rbp - {}]", offset));
+                } else {
+                    panic!("Function argument {} not defined", name);
+                }
+            }
+            Expression::FunctionCall { name, args } => {
+                let arg_regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+                for arg in args {
+                    self.compile_expression(arg);
+                    self.assem.push("    push rax".into());
+                }
+                for i in (0..args.len()).rev() {
+                    self.assem.push(format!("    pop {}", arg_regs[i]));
+                }
+                self.assem.push("    mov rax, 0".into());
+                self.assem.push(format!("    call _{}", name));
+            }
         }
     }
 
@@ -276,34 +309,28 @@ impl Compiler {
     }
 
     fn compile_params(&mut self, params: &[crate::ast::Expression]) {
-        
+        let regs = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+        for (i, param) in params.iter().enumerate() {
+            if let Expression::FunctionArg(name) = param {
+                let offset = self.var_offset;
+                self.offset_map.insert(name.clone(), offset);
+                self.var_offset += 8;
+                self.assem.push(format!("    mov [rbp - {}], {}", offset, regs[i]));
+            }
+        }
     }
 
     fn compile_print(&mut self, value: &crate::ast::Expression) {
-        match value {
-            Expression::Integer(int) => {
-                self.assem.push(format!("   mov rsi, {}", int));
-                self.assem.push("    lea rdi, [rel fmt]".to_string());
-
-            }
-            Expression::StringLiteral(s) => {
-                let label = self.register_string_literal(s);
-                self.assem.push(format!("    lea rsi, [rel {}]", label));
-                self.assem.push("    lea rdi, [rel fmt_str]".to_string()); // fmt_str for string, e.g., "%s\n"
-            }
-            Expression::Variable(var) => {
-                if let Some(var_offset) = self.offset_map.get(var) {
-                    self.assem.push(format!("    mov rsi, [rbp - {}]", var_offset));
-                    self.assem.push("    lea rdi, [rel fmt]".to_string());
-                } else {
-                    panic!("Variable {} is not defined", var);
-                }
-            }
-            _ => {}
-        }
-
-        self.assem.push("    mov rax, 0".to_string());
-        self.assem.push("    call _printf".to_string());
+        let fmt_label = if matches!(value, Expression::StringLiteral(_)) {
+            "fmt_str"
+        } else {
+            "fmt"
+        };
+        self.compile_expression(value);
+        self.assem.push("    mov rsi, rax".into());
+        self.assem.push(format!("    lea rdi, [rel {}]", fmt_label));
+        self.assem.push("    mov rax, 0".into());
+        self.assem.push("    call _printf".into());
     }
 
     fn compile_while(&mut self, condition: &Expression, body: &[Statement]) {

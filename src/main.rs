@@ -14,7 +14,7 @@ mod tokens;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        eprintln!("Usage: {} <input.my> <output.asm>", args[0]);
+        eprintln!("Usage: {} <input.bonk> <output.asm>", args[0]);
         std::process::exit(1);
     }
 
@@ -23,10 +23,8 @@ fn main() {
 
     let mut lexer = Lexer::new(file_input);
     let tokens = lexer.tokenise();
-    println!("Tokens: {:?}", tokens);
 
     let ast = parse_program(&tokens).expect("Parsing error");
-    println!("AST: {:?}", ast);
 
     let mut comp = Compiler::new();
     let result = comp.compile(ast);

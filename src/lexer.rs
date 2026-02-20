@@ -63,6 +63,7 @@ impl Lexer {
             "while" => Token::While,
             "do" => Token::Do,
             "print" => Token::Print,
+            "send" => Token::Send,
             "if" => Token::If,
             "then" => Token::Then,
             "else" => Token::Else,
@@ -88,7 +89,15 @@ impl Lexer {
             '(' => Token::LParen,
             ')' => Token::RParen,
             ',' => Token::Comma,
-            '<' => Token::Less,
+            '<' => {
+                self.advance();
+                if self.peek() == Some('=') {
+                    self.advance();
+                    Token::LessEq
+                } else {
+                    Token::Less
+                }
+            }
             '>' => Token::Greater,
             '!' => {
                 self.advance();
@@ -129,7 +138,7 @@ impl Lexer {
                 let tok = self.lex_operator();
                 tokens.push(tok.clone());
                 match tok {
-                    Token::Eq | Token::NotEq | Token::StringLiteral(_) => {}
+                    Token::Eq | Token::NotEq | Token::Less | Token::LessEq | Token::StringLiteral(_) => {}
                     _ => self.advance(),
                 }
             }

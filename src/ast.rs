@@ -6,10 +6,8 @@ pub enum Statement {
         name: String,
         value: Expression,
     },
-    Main{
-        name: String,
-    },
     Print(Expression),
+    Send(Expression),
     Function{
         name: String,
         params: Vec<Expression>,
@@ -58,6 +56,7 @@ pub enum BinaryOperator {
     NEq,
     Gt,
     Lt,
+    LtEq,
 }
 
 

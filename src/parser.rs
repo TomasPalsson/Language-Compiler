@@ -21,30 +21,32 @@ fn parse_statement(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String
     let statement = match iter.peek() {
         Some(Token::Function) => parse_function(iter),
         Some(Token::FunctionCall(name)) => {
+            let name = name.clone();
             iter.next();
-            Ok(Statement::FunctionCall{
-            name: name.clone(),
-            args: Vec::new(),
-        })},
+            let mut args = Vec::new();
+            if matches!(iter.peek(), Some(Token::LParen)) {
+                iter.next();
+                while !matches!(iter.peek(), Some(Token::RParen)) {
+                    args.push(parse_expression(iter)?);
+                    if matches!(iter.peek(), Some(Token::Comma)) {
+                        iter.next();
+                    }
+                }
+                iter.next(); // consume RParen
+            }
+            Ok(Statement::FunctionCall{ name, args })
+        },
         Some(Token::If) => parse_if(iter),
 
         Some(Token::Print) => {
             iter.next();
-            match iter.peek() {
-                Some(Token::Identifier(name)) => {
-                    iter.next();
-                    Ok(Statement::Print(Expression::Variable(name.clone())))
-                }
-                Some(Token::Number(int)) => {
-                    iter.next();
-                    Ok(Statement::Print(Expression::Integer(*int)))
-                }
-                Some(Token::StringLiteral(string)) => {
-                    iter.next();
-                    Ok(Statement::Print(Expression::StringLiteral(string.clone())))
-                }
-                _ => Err("Print statement not defined correctly".to_string())
-            }
+            let expr = parse_expression(iter)?;
+            Ok(Statement::Print(expr))
+        }
+        Some(Token::Send) => {
+            iter.next();
+            let expr = parse_expression(iter)?;
+            Ok(Statement::Send(expr))
         }
         Some(Token::While) => parse_while(iter),
         Some(Token::Identifier(_)) => parse_assignment(iter),
@@ -180,6 +182,7 @@ fn get_operator(token: &Token) -> Result<BinaryOperator, String> {
         Token::Eq => Ok(BinaryOperator::Eq),
         Token::NotEq => Ok(BinaryOperator::NEq),
         Token::Less => Ok(BinaryOperator::Lt),
+        Token::LessEq => Ok(BinaryOperator::LtEq),
         Token::Greater => Ok(BinaryOperator::Gt),
         _ => Err(format!("Error in parsing operator: {:?}", token)),
     }
@@ -214,7 +217,7 @@ fn parse_binary_expression(iter: &mut Peekable<Iter<Token>>, min_prec: u8) -> Re
     let mut left = parse_atomics(iter)?;
 
     while let Some(op_token) = iter.peek() {
-        if !matches!(op_token, Token::Plus | Token::Minus | Token::Multiply | Token::Divide | Token::Eq | Token::Less | Token::Greater | Token::NotEq) {
+        if !matches!(op_token, Token::Plus | Token::Minus | Token::Multiply | Token::Divide | Token::Eq | Token::Less | Token::LessEq | Token::Greater | Token::NotEq) {
             break;
         }
         let prec = get_precedence(op_token);
@@ -247,6 +250,24 @@ fn parse_atomics(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String>
         Some(Token::Identifier(name)) => {
             iter.next();
             Ok(Expression::Variable(name.clone()))
+        }
+        Some(Token::FunctionCall(_)) => {
+            let name = match iter.next() {
+                Some(Token::FunctionCall(n)) => n.clone(),
+                _ => unreachable!(),
+            };
+            let mut args = Vec::new();
+            if matches!(iter.peek(), Some(Token::LParen)) {
+                iter.next();
+                while !matches!(iter.peek(), Some(Token::RParen)) {
+                    args.push(parse_expression(iter)?);
+                    if matches!(iter.peek(), Some(Token::Comma)) {
+                        iter.next();
+                    }
+                }
+                iter.next(); // consume RParen
+            }
+            Ok(Expression::FunctionCall { name, args })
         }
         other => Err(format!("Expected expression, got {:?}", other)),
     }
