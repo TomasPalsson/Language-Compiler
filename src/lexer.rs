@@ -64,6 +64,7 @@ impl Lexer {
             "do" => Token::Do,
             "print" => Token::Print,
             "send" => Token::Send,
+            "fetch" => Token::Fetch,
             "if" => Token::If,
             "then" => Token::Then,
             "else" => Token::Else,

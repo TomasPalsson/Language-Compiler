@@ -49,6 +49,7 @@ fn parse_statement(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String
             Ok(Statement::Send(expr))
         }
         Some(Token::While) => parse_while(iter),
+        Some(Token::Fetch) => parse_fetch_statement(iter),
         Some(Token::Identifier(_)) => parse_assignment(iter),
         _ => Err(format!("Cannot parse found {:?}", iter.peek())),
     }?;
@@ -251,6 +252,15 @@ fn parse_atomics(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String>
             iter.next();
             Ok(Expression::Variable(name.clone()))
         }
+        Some(Token::Fetch) => {
+            iter.next(); // consume Fetch token
+            let (method, url, body) = parse_fetch_args(iter)?;
+            Ok(Expression::Fetch {
+                method: Box::new(method),
+                url: Box::new(url),
+                body: body.map(Box::new),
+            })
+        }
         Some(Token::FunctionCall(_)) => {
             let name = match iter.next() {
                 Some(Token::FunctionCall(n)) => n.clone(),
@@ -271,6 +281,41 @@ fn parse_atomics(iter: &mut Peekable<Iter<Token>>) -> Result<Expression, String>
         }
         other => Err(format!("Expected expression, got {:?}", other)),
     }
+}
+
+fn is_fetch_arg_start(token: &Token) -> bool {
+    matches!(token, Token::StringLiteral(_) | Token::Identifier(_) | Token::Number(_) | Token::FunctionCall(_))
+}
+
+fn parse_fetch_args(iter: &mut Peekable<Iter<Token>>) -> Result<(Expression, Expression, Option<Expression>), String> {
+    // Parse first arg (required)
+    let first = parse_atomics(iter)?;
+
+    // Check for second arg
+    if let Some(tok) = iter.peek() {
+        if is_fetch_arg_start(tok) {
+            let second = parse_atomics(iter)?;
+
+            // Check for third arg
+            if let Some(tok) = iter.peek() {
+                if is_fetch_arg_start(tok) {
+                    let third = parse_atomics(iter)?;
+                    // 3 args: method, url, body
+                    return Ok((first, second, Some(third)));
+                }
+            }
+            // 2 args: method, url
+            return Ok((first, second, None));
+        }
+    }
+    // 1 arg: url only, default to GET
+    Ok((Expression::StringLiteral("GET".to_string()), first, None))
+}
+
+fn parse_fetch_statement(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String> {
+    iter.next(); // consume Fetch token
+    let (method, url, body) = parse_fetch_args(iter)?;
+    Ok(Statement::Fetch { method, url, body })
 }
 
 fn parse_while(iter: &mut Peekable<Iter<Token>>) -> Result<Statement, String> {

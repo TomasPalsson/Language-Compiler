@@ -1,0 +1,7 @@
+run main()
+  result = fetch "http://httpbin.org/get";
+  print result;
+
+  resp = fetch "POST" "http://httpbin.org/post" "hello=world";
+  print resp;
+end

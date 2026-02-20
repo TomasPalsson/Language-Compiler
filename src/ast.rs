@@ -26,7 +26,11 @@ pub enum Statement {
         condition: Expression,
         body: Vec<Statement>,
     },
-     
+    Fetch {
+        method: Expression,
+        url: Expression,
+        body: Option<Expression>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -43,7 +47,12 @@ pub enum Expression {
     FunctionCall{
         name: String,
         args: Vec<Expression>
-    }
+    },
+    Fetch {
+        method: Box<Expression>,
+        url: Box<Expression>,
+        body: Option<Box<Expression>>,
+    },
 }
 
 #[derive(Debug, Clone)]
